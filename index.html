@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Desafio das Dezenas</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{overflow:hidden;font-family:Arial,sans-serif;background:#111}
+#hud{position:fixed;top:0;left:0;width:100%;height:80px;background:rgba(255,255,255,.85);
+display:flex;justify-content:space-around;align-items:center;font-weight:bold;z-index:10}
+canvas{display:block}
+#start,#overlay{position:fixed;inset:0;display:flex;flex-direction:column;justify-content:center;
+align-items:center;background:rgba(0,0,0,.85);color:#fff;z-index:20}
+#overlay{display:none}
+button{padding:15px 30px;font-size:22px;border:none;border-radius:12px;cursor:pointer}
+</style>
+</head>
+<body>
+
+<div id="hud">
+<div>DEZENA: <span id="target">00</span></div>
+<div><span id="stage">0</span>/10</div>
+<div><span id="timer">02:30</span></div>
+</div>
+
+<div id="start">
+
+<h1>⚽ DESAFIO DAS DEZENAS</h1>
+
+<p>Digite seu código</p>
+
+<input
+ id="codigo"
+ type="tel"
+ maxlength="8"
+ inputmode="numeric"
+ placeholder="Código de 8 dígitos"
+ style="
+ padding:15px;
+ font-size:28px;
+ text-align:center;
+ width:260px;
+ border-radius:10px;
+ border:none;
+ margin:20px;
+ ">
+
+<div id="loginMsg"
+style="
+height:30px;
+color:#ffcc00;
+font-weight:bold;
+">
+</div>
+
+<button onclick="validarCodigo()">
+VALIDAR
+</button>
+
+</div>
+
+<div id="overlay">
+<h1 id="title"></h1>
+<p id="msg"></p><br>
+<button onclick="location.reload()">REINICIAR</button>
+</div>
+
+<canvas id="game"></canvas>
+
+<script>
+const canvas=document.getElementById("game");
+const ctx=canvas.getContext("2d");
+
+function resize(){
+ canvas.width=innerWidth;
+ canvas.height=innerHeight;
+}
+resize();
+addEventListener("resize",resize);
+
+const bg=new Image();
+bg.src="img/fundo.png";
+
+const ballImg=new Image();
+ballImg.src="img/bola.png";
+
+// AUDIOS
+const bgMusic = new Audio("audio/musica.mp3");
+bgMusic.loop = true;
+bgMusic.volume = 0.25;
+
+const acertoSound = new Audio("audio/acerto.mp3");
+const erroSound = new Audio("audio/erro.mp3");
+const dezenaSound = new Audio("audio/dezena.mp3");
+
+let balls=[];
+let effects=[];
+let completed=0;
+let target="";
+let expected=0;
+let time=150;
+let running=false;
+
+function newTarget(){
+ target=(""+Math.floor(Math.random()*10)+Math.floor(Math.random()*10));
+ expected=0;
+ updateTarget();
+}
+
+function updateTarget(){
+ const el=document.getElementById("target");
+ if(expected===0) el.textContent=target;
+ else el.textContent="✓"+target[0]+" "+target[1];
+}
+
+function spawnBall(){
+ balls.push({
+  x:55+Math.random()*(canvas.width-110),
+  y:-100,
+  r:55,
+  n:Math.floor(Math.random()*10),
+  speed:2+Math.random()*3+completed*0.3,
+  rot:Math.random()*6.28,
+  rotSpeed:0.03+Math.random()*0.05
+ });
+}
+
+function clickBall(x,y){
+ if(!running)return;
+
+ for(let i=balls.length-1;i>=0;i--){
+  let b=balls[i];
+  let d=Math.hypot(x-b.x,y-b.y);
+
+  if(d<=b.r){
+    let expectedDigit=parseInt(target[expected]);
+
+    if(b.n===expectedDigit){
+
+      acertoSound.currentTime=0;
+      acertoSound.play();
+
+      expected++;
+      effects.push({x:b.x,y:b.y,t:"✓",life:40,c:"#00ff66"});
+
+      if(expected>=2){
+
+        dezenaSound.currentTime=0;
+        dezenaSound.play();
+
+        completed++;
+        document.getElementById("stage").textContent=completed;
+
+        if(completed>=10){
+          finish(true);
+          return;
+        }
+        newTarget();
+      }
+
+    }else{
+
+      erroSound.currentTime=0;
+      erroSound.play();
+
+      expected=0;
+      effects.push({x:b.x,y:b.y,t:"✖",life:40,c:"#ff3333"});
+      updateTarget();
+    }
+
+    balls.splice(i,1);
+    return;
+  }
+ }
+}
+
+canvas.addEventListener("click",e=>clickBall(e.clientX,e.clientY));
+canvas.addEventListener("touchstart",e=>{
+ e.preventDefault();
+ clickBall(e.touches[0].clientX,e.touches[0].clientY);
+},{passive:false});
+
+function update(){
+ if(!running)return;
+
+ if(Math.random()<0.05) spawnBall();
+
+ balls.forEach(b=>{
+   b.y+=b.speed;
+   b.rot+=b.rotSpeed;
+ });
+
+ balls=balls.filter(b=>b.y<canvas.height+100);
+
+ effects.forEach(e=>{e.y-=1;e.life--;});
+ effects=effects.filter(e=>e.life>0);
+}
+
+function draw(){
+ ctx.clearRect(0,0,canvas.width,canvas.height);
+
+ if(bg.complete){
+   const scale=Math.max(canvas.width/bg.width,canvas.height/bg.height);
+   const w=bg.width*scale;
+   const h=bg.height*scale;
+   const x=(canvas.width-w)/2;
+   const y=(canvas.height-h)/2;
+   ctx.drawImage(bg,x,y,w,h);
+ }
+
+ balls.forEach(b=>{
+   if(ballImg.complete){
+      ctx.save();
+      ctx.translate(b.x,b.y);
+      ctx.rotate(b.rot);
+      ctx.drawImage(ballImg,-b.r,-b.r,b.r*2,b.r*2);
+      ctx.restore();
+   }
+
+   ctx.fillStyle="black";
+   ctx.font="bold 34px Arial";
+   ctx.textAlign="center";
+   ctx.textBaseline="middle";
+   ctx.fillText(b.n,b.x+2,b.y+2);
+
+   ctx.fillStyle="white";
+   ctx.fillText(b.n,b.x,b.y);
+ });
+
+ effects.forEach(e=>{
+   ctx.globalAlpha=e.life/40;
+   ctx.fillStyle=e.c;
+   ctx.font="bold 40px Arial";
+   ctx.fillText(e.t,e.x,e.y);
+   ctx.globalAlpha=1;
+ });
+}
+
+function loop(){
+ update();
+ draw();
+ requestAnimationFrame(loop);
+}
+const codigosValidos = [
+
+"84726195",
+"53179264",
+"40821635",
+"91736284",
+"24681357"
+
+];
+
+function validarCodigo(){
+
+ const codigo =
+ document.getElementById("codigo")
+ .value
+ .trim();
+
+ if(codigo.length !== 8){
+
+   document.getElementById("loginMsg")
+   .textContent =
+   "Digite 8 números";
+
+   return;
+ }
+
+ if(!codigosValidos.includes(codigo)){
+
+   document.getElementById("loginMsg")
+   .textContent =
+   "Código inválido";
+
+   return;
+ }
+
+ if(localStorage.getItem("codigo_"+codigo)){
+
+   document.getElementById("loginMsg")
+   .textContent =
+   "Código já utilizado";
+
+   return;
+ }
+
+ localStorage.setItem(
+   "codigo_"+codigo,
+   "usado"
+ );
+
+ startGame();
+}
+
+function startGame(){
+
+ document.getElementById("start").style.display="none";
+
+ bgMusic.play();
+
+ running=true;
+
+ newTarget();
+}
+
+function finish(win){
+
+ running=false;
+ bgMusic.pause();
+
+ document.getElementById("overlay").style.display="flex";
+
+ if(win){
+
+   const hoje = new Date();
+
+   const dia =
+   String(hoje.getDate()).padStart(2,"0");
+
+   const mes =
+   String(hoje.getMonth()+1).padStart(2,"0");
+
+   const ano =
+   String(hoje.getFullYear()).slice(-2);
+
+   const dataCodigo =
+   dia + mes + ano;
+
+   const mapa = {
+     "0":"A",
+     "1":"B",
+     "2":"C",
+     "3":"D",
+     "4":"E",
+     "5":"F",
+     "6":"G",
+     "7":"H",
+     "8":"I",
+     "9":"J"
+   };
+
+   let letras="";
+
+   for(let c of dataCodigo){
+     letras += mapa[c];
+   }
+
+   let codigoFinal="";
+
+   for(let letra of letras){
+
+     codigoFinal += Math.floor(Math.random()*10);
+     codigoFinal += letra;
+     codigoFinal += Math.floor(Math.random()*10);
+   }
+
+   document.getElementById("title").textContent =
+   "🏆 PARABÉNS";
+
+   document.getElementById("msg").innerHTML =
+   "Apresente este código:<br><br>" +
+   "<span style='font-size:34px;font-weight:bold'>" +
+   codigoFinal +
+   "</span>";
+
+ }else{
+
+   document.getElementById("title").textContent =
+   "⏰ TEMPO ESGOTADO";
+
+   document.getElementById("msg").textContent =
+   "Você completou " +
+   completed +
+   " de 10 dezenas.";
+ }
+}
+
+
+
+setInterval(()=>{
+ if(!running)return;
+ time--;
+ let m=String(Math.floor(time/60)).padStart(2,"0");
+ let s=String(time%60).padStart(2,"0");
+ document.getElementById("timer").textContent=m+":"+s;
+ if(time<=0) finish(false);
+},1000);
+
+loop();
+</script>
+</body>
+</html>
